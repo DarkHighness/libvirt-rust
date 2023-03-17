@@ -1279,19 +1279,25 @@ impl Domain {
         }
     }
 
-    pub fn memory_stats(&self, nr_stats: u32, flags: u32) -> Result<MemoryStats, Error> {
+    pub fn memory_stats(&self, nr_stats: u32, flags: u32) -> Result<Vec<MemoryStats>, Error> {
         unsafe {
-            let mut pinfo = mem::MaybeUninit::uninit();
+            let mut pinfo: Vec<mem::MaybeUninit<sys::_virDomainMemoryStat>> = Vec::new();
+
+            pinfo.resize_with(nr_stats as usize, mem::MaybeUninit::uninit);
+
             let ret = sys::virDomainMemoryStats(
                 self.as_ptr(),
-                pinfo.as_mut_ptr(),
+                pinfo.as_mut_ptr() as *mut sys::virDomainMemoryStatStruct,
                 nr_stats as libc::c_uint,
                 flags as libc::c_uint,
             );
             if ret == -1 {
                 return Err(Error::last_error());
             }
-            Ok(MemoryStats::from_ptr(&mut pinfo.assume_init()))
+            Ok(pinfo
+                .into_iter()
+                .map(|info| MemoryStats::from_ptr(&mut info.assume_init()))
+                .collect())
         }
     }
 
